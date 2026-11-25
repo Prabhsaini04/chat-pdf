@@ -19,9 +19,10 @@ export default function AuthPage({ onAuth }: Props) {
     try {
       if (mode === "signup") {
         await auth.signup(email, password);
-      } else {
-        await auth.login(email, password);
       }
+      // Signup only creates the account; it does not start a session.
+      // Log in immediately after so the user lands authenticated either way.
+      await auth.login(email, password);
       onAuth();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

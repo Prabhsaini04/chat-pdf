@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home --uid 1000 appuser
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /data/documents \
+    && chown -R appuser:appuser /data/documents
 
 COPY pyproject.toml ./
 # Install core + ML extras so app and worker images share one Dockerfile.
