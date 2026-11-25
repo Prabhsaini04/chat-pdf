@@ -44,4 +44,5 @@ ignore = ["B008"]
 testpaths = ["tests"]
 markers = [
     "isolation: cross-tenant isolation tests (ENG-CPD-006) — required CI gate, must never be skipped on a PR touching documents/chunks/conversations/auth",
+    "rate_limiting: rate limiting and concurrency control tests (ENG-CPD-007) — required CI gate on any PR touching rate_limiting/ or question/upload endpoints",
 ]

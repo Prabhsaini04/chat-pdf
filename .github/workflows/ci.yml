@@ -65,10 +65,26 @@ jobs:
       - run: pytest -m isolation -v
         working-directory: backend
 
+  # ENG-CPD-007: rate limiting tests run without a real Redis — all tests use
+  # mock Redis clients (see tests/test_rate_limiting.py). No service container
+  # required. Split as a named job so its pass/fail is unambiguous in the PR
+  # checks list, same rationale as test-backend-isolation.
+  test-backend-rate-limiting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+        working-directory: backend
+      - run: pytest -m rate_limiting -v
+        working-directory: backend
+
 # Remaining stages (general test-backend, build, dependency scan, artifact
 # push, deploy, required-check branch-protection wiring) are
 # devops-architect's CI/CD design (DEVOPS/DEPLOYMENT_ARCHITECTURE.md §5) —
 # not added here per ENG-CPD-001's "CI skeleton, no stages wired yet"
-# scope. Configuring test-backend-isolation as a required status check on
-# branch protection is a repo-admin action (CTO/Human Owner), not
-# something this workflow file can do by itself.
+# scope. Configuring test-backend-isolation and test-backend-rate-limiting
+# as required status checks on branch protection is a repo-admin action
+# (CTO/Human Owner), not something this workflow file can do by itself.
