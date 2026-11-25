@@ -15,6 +15,7 @@ dependencies = [
     "celery>=5.4,<6",
     "redis>=5.1,<6",
     "argon2-cffi>=23.1,<24",
+    "email-validator>=2.2,<3",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +33,12 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI's `Depends()`-as-default-argument is the framework's own
+# idiomatic dependency-injection pattern, not the footgun this rule exists
+# to catch (a mutable/expensive default evaluated once at import time) —
+# FastAPI re-evaluates it per request. Ignoring project-wide rather than
+# per-call, since every route in this codebase uses the same pattern.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
