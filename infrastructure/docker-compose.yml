@@ -1,0 +1,67 @@
+name: chat-pdf
+
+services:
+  app:
+    build:
+      context: ../backend
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+      STORAGE_ROOT: /data/documents
+    ports:
+      - "8000:8000"
+    volumes:
+      - document_storage:/data/documents
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chatpdf
+      POSTGRES_PASSWORD: chatpdf
+      POSTGRES_DB: chatpdf
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  redis:
+    image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+
+volumes:
+  postgres_data:
+  ollama_models:
+  document_storage:
