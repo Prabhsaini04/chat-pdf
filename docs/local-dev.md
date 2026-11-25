@@ -24,8 +24,9 @@ docker compose -f infrastructure/docker-compose.yml up -d
 ```
 
 The `app` container reads `backend/.env` (copy `backend/.env.example` first
-if it doesn't exist yet). These are dev-only placeholder values
-(ENG-CPD-002) — not a production secrets mechanism.
+if it doesn't exist yet). These are dev-only placeholder values — see
+`secrets-management.md` for the full requirement and why this pattern is
+not a production secrets mechanism (ENG-CPD-002).
 
 ## Tests
 
