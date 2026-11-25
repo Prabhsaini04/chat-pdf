@@ -15,5 +15,15 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     storage_root: str = "/data/documents"
 
+    # Auth (ADR-CPD-003). Exact values are ASSUMPTIONs carried from that
+    # design, not final product requirements — adjustable via env without a
+    # code change, flagged in ENG-CPD-003/005 for Security/product
+    # confirmation.
+    session_ttl_days: int = 7
+    cookie_secure: bool = True
+    cookie_samesite: str = "lax"
+    max_failed_login_attempts: int = 5
+    lockout_window_minutes: int = 15
+
 
 settings = Settings()
