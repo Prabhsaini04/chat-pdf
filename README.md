@@ -1,8 +1,17 @@
 # chat-pdf
 
-A web application that lets a user upload a PDF and ask questions about its
-content, answered via an LLM with retrieval over the document
-("chat with your PDF").
+Upload a PDF, ask questions about it, get answers grounded in the
+document's content with page-level citations.
 
-Governance, requirements, and architecture for this project are tracked
-separately in the AI Engineering org repo, not in this README.
+Self-hosted stack: FastAPI, React + Vite, PostgreSQL + pgvector, Celery +
+Redis, Ollama (Qwen2.5), PyMuPDF, Tesseract OCR, BGE-small-en-v1.5.
+
+Requirements, architecture, ADRs, threat model, and test plans for this
+project are maintained in the AI-ENGINEERING-TEAM org repo under
+`07-Projects/chat-pdf/` — see `docs/README.md` for the full list. This repo
+is the implementation only.
+
+See `docs/local-dev.md` to run this locally.
+
+**Status:** scaffolding (ENG-CPD-001) — no application features implemented
+yet.

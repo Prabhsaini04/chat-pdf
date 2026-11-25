@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "backend[dev]"
+      - run: ruff check backend
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+
+# Remaining stages (test, build, dependency scan, artifact push, deploy,
+# required-check branch-protection wiring) are devops-architect's CI/CD
+# design (DEVOPS/DEPLOYMENT_ARCHITECTURE.md §5) — not added here per
+# ENG-CPD-001's "CI skeleton, no stages wired yet" scope.
