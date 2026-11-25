@@ -3,6 +3,13 @@ from celery.schedules import crontab
 
 from app.config import settings
 
+# Import every SQLAlchemy model up front so the worker process's mapper
+# registry is fully populated before any task runs — a task module that
+# only imports the models it touches (e.g. Document, Chunk) can otherwise
+# fail to resolve a cross-domain foreign key (e.g. documents.account_id ->
+# accounts.id) whose target table was never registered in this process.
+import app.models  # noqa: F401,E402
+
 celery = Celery(
     "chat_pdf",
     broker=settings.celery_broker_url,

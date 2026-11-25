@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 appuser \
-    && mkdir -p /data/documents \
-    && chown -R appuser:appuser /data/documents
+    && mkdir -p /data/documents /home/appuser/.cache/huggingface \
+    && chown -R appuser:appuser /data/documents /home/appuser/.cache
 
 COPY pyproject.toml ./
 # Install core + ML extras so app and worker images share one Dockerfile.
