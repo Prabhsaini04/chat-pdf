@@ -4,17 +4,24 @@ services:
   app:
     build:
       context: ../backend
+    # host networking: Ollama on this machine listens on 127.0.0.1:11434
+    # only, which bridge-networked containers cannot reach. Host mode lets
+    # the app container see the host's loopback interface directly.
+    network_mode: host
+    command: uvicorn app.main:app --host 0.0.0.0 --port 5000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
     env_file:
       - ../backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      OLLAMA_BASE_URL: http://localhost:11434
       STORAGE_ROOT: /data/documents
-    ports:
-      - "8000:8000"
     volumes:
       - document_storage:/data/documents
       - hf_cache:/home/appuser/.cache/huggingface
@@ -22,8 +29,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
-      ollama:
         condition: service_started
     deploy:
       resources:
@@ -37,15 +42,16 @@ services:
   worker-io:
     build:
       context: ../backend
+    network_mode: host
     command: celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 --loglevel=info
     env_file:
       - ../backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      OLLAMA_BASE_URL: http://localhost:11434
       STORAGE_ROOT: /data/documents
     volumes:
       - document_storage:/data/documents
@@ -65,17 +71,18 @@ services:
   celery-beat:
     build:
       context: ../backend
+    network_mode: host
     command: >
       celery -A app.workers.celery_app:celery beat --loglevel=info
       --schedule /tmp/celerybeat-schedule
     env_file:
       - ../backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      OLLAMA_BASE_URL: http://localhost:11434
       STORAGE_ROOT: /data/documents
     depends_on:
       - redis
@@ -89,8 +96,10 @@ services:
   frontend:
     build:
       context: ../frontend
-    ports:
-      - "3000:80"
+    # host networking: this environment does not route container-to-container
+    # traffic through the bridge gateway IP to a published port (hairpin NAT
+    # is blocked), so frontend and app must share the host's network stack.
+    network_mode: host
     depends_on:
       - app
 
@@ -117,26 +126,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     deploy:
       resources:
         limits:
           cpus: "0.5"
           memory: 256m
 
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_models:/root/.ollama
-    ports:
-      - "11434:11434"
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4g
-
 volumes:
   postgres_data:
-  ollama_models:
   document_storage:
   hf_cache:
