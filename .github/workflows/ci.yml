@@ -27,7 +27,48 @@ jobs:
       - run: npm run lint
         working-directory: frontend
 
-# Remaining stages (test, build, dependency scan, artifact push, deploy,
-# required-check branch-protection wiring) are devops-architect's CI/CD
-# design (DEVOPS/DEPLOYMENT_ARCHITECTURE.md §5) — not added here per
-# ENG-CPD-001's "CI skeleton, no stages wired yet" scope.
+  # ENG-CPD-006 acceptance criteria explicitly requires this test wired into
+  # CI as a required check, ahead of the general CI/CD pipeline design
+  # (devops-architect's DEPLOYMENT_ARCHITECTURE.md §5, still otherwise "NOT
+  # YET") — scoped to exactly what that task asks for, not a redesign of
+  # the whole pipeline. Split from the general test-backend job (not yet
+  # added — most backend code still has no non-isolation tests worth a
+  # separate gate) so this specific gate's pass/fail is unambiguous in the
+  # PR checks list, per DEPLOYMENT_ARCHITECTURE.md §5.3's planned
+  # `test-backend::isolation` gate name.
+  test-backend-isolation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: chatpdf
+          POSTGRES_PASSWORD: chatpdf
+          POSTGRES_DB: chatpdf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+        working-directory: backend
+      - run: python -c "import sqlalchemy as sa; e = sa.create_engine('$DATABASE_URL'); c = e.connect(); c.execute(sa.text('CREATE EXTENSION IF NOT EXISTS vector')); c.commit()"
+      - run: pytest -m isolation -v
+        working-directory: backend
+
+# Remaining stages (general test-backend, build, dependency scan, artifact
+# push, deploy, required-check branch-protection wiring) are
+# devops-architect's CI/CD design (DEVOPS/DEPLOYMENT_ARCHITECTURE.md §5) —
+# not added here per ENG-CPD-001's "CI skeleton, no stages wired yet"
+# scope. Configuring test-backend-isolation as a required status check on
+# branch protection is a repo-admin action (CTO/Human Owner), not
+# something this workflow file can do by itself.

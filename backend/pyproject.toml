@@ -42,3 +42,6 @@ ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "isolation: cross-tenant isolation tests (ENG-CPD-006) — required CI gate, must never be skipped on a PR touching documents/chunks/conversations/auth",
+]
