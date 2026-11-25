@@ -2,10 +2,17 @@ FROM python:3.11-slim AS base
 
 WORKDIR /app
 
+# System deps: tesseract for OCR (ENG-CPD-018), poppler-utils is not needed
+# since PyMuPDF bundles its own PDF renderer.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 appuser
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
+# Install core + ML extras so app and worker images share one Dockerfile.
+RUN pip install --no-cache-dir ".[ml]"
 
 COPY app ./app
 

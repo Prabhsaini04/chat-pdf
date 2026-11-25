@@ -9,21 +9,90 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
       REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
       OLLAMA_BASE_URL: http://ollama:11434
       STORAGE_ROOT: /data/documents
     ports:
       - "8000:8000"
     volumes:
       - document_storage:/data/documents
+      - hf_cache:/home/appuser/.cache/huggingface
     depends_on:
-      - postgres
-      - redis
-      - ollama
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 1g
+          memory: 2g
+
+  # worker-io handles file I/O: PDF extraction, file storage, OCR,
+  # and scheduled hard-delete.  Separate from worker-llm to avoid
+  # file I/O competing with CPU-bound LLM inference.
+  worker-io:
+    build:
+      context: ../backend
+    command: celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 --loglevel=info
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      OLLAMA_BASE_URL: http://ollama:11434
+      STORAGE_ROOT: /data/documents
+    volumes:
+      - document_storage:/data/documents
+      - hf_cache:/home/appuser/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+
+  # celery-beat schedules the hard-delete worker.
+  celery-beat:
+    build:
+      context: ../backend
+    command: >
+      celery -A app.workers.celery_app:celery beat --loglevel=info
+      --schedule /tmp/celerybeat-schedule
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      OLLAMA_BASE_URL: http://ollama:11434
+      STORAGE_ROOT: /data/documents
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 256m
+
+  # frontend (React + Nginx)
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - app
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -35,6 +104,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatpdf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -65,3 +139,4 @@ volumes:
   postgres_data:
   ollama_models:
   document_storage:
+  hf_cache:

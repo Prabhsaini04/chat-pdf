@@ -1,0 +1,24 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class QuestionRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class MessageOut(BaseModel):
+    id: uuid.UUID
+    role: str
+    content: str
+    citation_pages: list[int]
+    citation_status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationOut(BaseModel):
+    document_id: uuid.UUID
+    messages: list[MessageOut]
