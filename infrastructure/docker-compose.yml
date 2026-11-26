@@ -40,6 +40,13 @@ services:
   # worker-io handles file I/O: PDF extraction, file storage, OCR,
   # and scheduled hard-delete.  Separate from worker-llm to avoid
   # file I/O competing with CPU-bound LLM inference.
+  # Runs the Celery beat scheduler embedded (-B) rather than as its own
+  # celery-beat container/process: this saves one container's worth of
+  # Python/Celery overhead (~65-70MB) since there is only ever one
+  # worker-io instance. CAUTION: if worker-io is ever scaled to more than
+  # one replica, split beat back out into its own single-instance service —
+  # embedded beat in multiple worker replicas would run the scheduler (and
+  # therefore the hard-delete sweep) more than once concurrently.
   worker-io:
     restart: unless-stopped
     build:
@@ -50,7 +57,9 @@ services:
     # show a permanently false "unhealthy".
     healthcheck:
       disable: true
-    command: celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 --loglevel=info
+    command: >
+      celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 -B
+      --schedule /tmp/celerybeat-schedule --loglevel=info
     env_file:
       - ../backend/.env
     environment:
@@ -73,36 +82,6 @@ services:
         limits:
           cpus: "2.0"
           memory: 4g
-
-  # celery-beat schedules the hard-delete worker.
-  celery-beat:
-    restart: unless-stopped
-    build:
-      context: ../backend
-    network_mode: host
-    # Same reasoning as worker-io: the image's baked-in HEALTHCHECK targets
-    # the app's web port, which this scheduler process never listens on.
-    healthcheck:
-      disable: true
-    command: >
-      celery -A app.workers.celery_app:celery beat --loglevel=info
-      --schedule /tmp/celerybeat-schedule
-    env_file:
-      - ../backend/.env
-    environment:
-      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
-      REDIS_URL: redis://localhost:6379/0
-      CELERY_BROKER_URL: redis://localhost:6379/1
-      CELERY_RESULT_BACKEND: redis://localhost:6379/2
-      OLLAMA_BASE_URL: http://localhost:11434
-      STORAGE_ROOT: /data/documents
-    depends_on:
-      - redis
-    deploy:
-      resources:
-        limits:
-          cpus: "0.1"
-          memory: 256m
 
   # frontend (React + Nginx)
   frontend:
