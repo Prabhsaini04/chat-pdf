@@ -13,6 +13,13 @@ RUN useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /data/documents /home/appuser/.cache
 
 COPY pyproject.toml ./
+# CPU-only torch: sentence-transformers only runs a small embedding model on
+# CPU here (the LLM itself is served by Ollama on the host, see
+# OLLAMA_BASE_URL) — the default PyPI torch wheel on Linux bundles the full
+# CUDA/cuDNN/NCCL stack (~1.5GB) that would never be used. Installing the
+# CPU wheel first makes it satisfy sentence-transformers' requirement below,
+# so pip never pulls the CUDA build.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 # Install core + ML extras so app and worker images share one Dockerfile.
 RUN pip install --no-cache-dir ".[ml]"
 

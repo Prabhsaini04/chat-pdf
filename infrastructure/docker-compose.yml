@@ -2,6 +2,7 @@ name: chat-pdf
 
 services:
   app:
+    restart: unless-stopped
     build:
       context: ../backend
     # host networking: Ollama on this machine listens on 127.0.0.1:11434
@@ -40,9 +41,15 @@ services:
   # and scheduled hard-delete.  Separate from worker-llm to avoid
   # file I/O competing with CPU-bound LLM inference.
   worker-io:
+    restart: unless-stopped
     build:
       context: ../backend
     network_mode: host
+    # The image bakes in a HEALTHCHECK that curls the app's web port (8000),
+    # which doesn't apply to this Celery worker — disable it rather than
+    # show a permanently false "unhealthy".
+    healthcheck:
+      disable: true
     command: celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 --loglevel=info
     env_file:
       - ../backend/.env
@@ -69,9 +76,14 @@ services:
 
   # celery-beat schedules the hard-delete worker.
   celery-beat:
+    restart: unless-stopped
     build:
       context: ../backend
     network_mode: host
+    # Same reasoning as worker-io: the image's baked-in HEALTHCHECK targets
+    # the app's web port, which this scheduler process never listens on.
+    healthcheck:
+      disable: true
     command: >
       celery -A app.workers.celery_app:celery beat --loglevel=info
       --schedule /tmp/celerybeat-schedule
@@ -94,6 +106,7 @@ services:
 
   # frontend (React + Nginx)
   frontend:
+    restart: unless-stopped
     build:
       context: ../frontend
     # host networking: this environment does not route container-to-container
@@ -104,6 +117,7 @@ services:
       - app
 
   postgres:
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: chatpdf
@@ -125,6 +139,7 @@ services:
           memory: 1g
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
