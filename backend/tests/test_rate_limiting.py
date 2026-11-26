@@ -7,7 +7,7 @@ required: conftest provides a `redis_client` fixture that skips when
 no Redis is reachable, and unit-level tests mock the Redis calls.
 """
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call
 
 import pytest
 from fastapi import FastAPI
@@ -140,6 +140,7 @@ def _make_app_with_rate_limited_route() -> FastAPI:
     handler as the real app — lets us test the HTTP 429 response shape."""
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
+
     from app.rate_limiting.exceptions import RateLimitExceeded
 
     mini = FastAPI()
@@ -171,6 +172,7 @@ def test_rate_limit_exception_returns_429_with_retry_after() -> None:
 def test_rate_limit_exception_carries_custom_detail() -> None:
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
+
     from app.rate_limiting.exceptions import RateLimitExceeded
 
     mini = FastAPI()

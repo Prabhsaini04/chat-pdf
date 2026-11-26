@@ -2,30 +2,101 @@ name: chat-pdf
 
 services:
   app:
+    restart: unless-stopped
     build:
       context: ../backend
+    # host networking: Ollama on this machine listens on 127.0.0.1:11434
+    # only, which bridge-networked containers cannot reach. Host mode lets
+    # the app container see the host's loopback interface directly.
+    network_mode: host
+    command: uvicorn app.main:app --host 0.0.0.0 --port 5000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
     env_file:
       - ../backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@postgres:5432/chatpdf
-      REDIS_URL: redis://redis:6379/0
-      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      OLLAMA_BASE_URL: http://localhost:11434
       STORAGE_ROOT: /data/documents
-    ports:
-      - "8000:8000"
     volumes:
       - document_storage:/data/documents
+      - hf_cache:/home/appuser/.cache/huggingface
     depends_on:
-      - postgres
-      - redis
-      - ollama
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 1g
+          memory: 2g
+
+  # worker-io handles file I/O: PDF extraction, file storage, OCR,
+  # and scheduled hard-delete.  Separate from worker-llm to avoid
+  # file I/O competing with CPU-bound LLM inference.
+  # Runs the Celery beat scheduler embedded (-B) rather than as its own
+  # celery-beat container/process: this saves one container's worth of
+  # Python/Celery overhead (~65-70MB) since there is only ever one
+  # worker-io instance. CAUTION: if worker-io is ever scaled to more than
+  # one replica, split beat back out into its own single-instance service —
+  # embedded beat in multiple worker replicas would run the scheduler (and
+  # therefore the hard-delete sweep) more than once concurrently.
+  worker-io:
+    restart: unless-stopped
+    build:
+      context: ../backend
+    network_mode: host
+    # The image bakes in a HEALTHCHECK that curls the app's web port (8000),
+    # which doesn't apply to this Celery worker — disable it rather than
+    # show a permanently false "unhealthy".
+    healthcheck:
+      disable: true
+    command: >
+      celery -A app.workers.celery_app:celery worker -Q worker-io -c 2 -B
+      --schedule /tmp/celerybeat-schedule --loglevel=info
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://chatpdf:chatpdf@localhost:5432/chatpdf
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      OLLAMA_BASE_URL: http://localhost:11434
+      STORAGE_ROOT: /data/documents
+    volumes:
+      - document_storage:/data/documents
+      - hf_cache:/home/appuser/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+
+  # frontend (React + Nginx)
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ../frontend
+    # host networking: this environment does not route container-to-container
+    # traffic through the bridge gateway IP to a published port (hairpin NAT
+    # is blocked), so frontend and app must share the host's network stack.
+    network_mode: host
+    depends_on:
+      - app
 
   postgres:
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: chatpdf
@@ -35,6 +106,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatpdf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -42,26 +118,17 @@ services:
           memory: 1g
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     deploy:
       resources:
         limits:
           cpus: "0.5"
           memory: 256m
 
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_models:/root/.ollama
-    ports:
-      - "11434:11434"
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4g
-
 volumes:
   postgres_data:
-  ollama_models:
   document_storage:
+  hf_cache:
